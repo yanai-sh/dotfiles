@@ -1,0 +1,14 @@
+[Unit]
+Description=Bridge the Windows OpenSSH agent into WSL
+Documentation=https://github.com/mame/wsl2-ssh-agent
+ConditionPathExists=/proc/sys/fs/binfmt_misc/WSLInterop
+ConditionPathExists=%h/.local/lib/win32/powershell.exe
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/wsl2-ssh-agent --foreground --socket=%t/wsl2-ssh-agent.sock --powershell-path=%h/.local/lib/win32/powershell.exe
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=default.target

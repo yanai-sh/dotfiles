@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wsl2-ssh-agent.sock"
+exec ssh-keygen "$@"

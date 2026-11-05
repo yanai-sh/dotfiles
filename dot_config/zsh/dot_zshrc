@@ -1,0 +1,33 @@
+# Persistent, deduplicated history.
+export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+mkdir -p "$XDG_STATE_HOME/zsh" "$XDG_CACHE_HOME/zsh"
+HISTFILE="$XDG_STATE_HOME/zsh/history"
+HISTSIZE=50000
+SAVEHIST=50000
+setopt APPEND_HISTORY
+setopt EXTENDED_HISTORY
+setopt HIST_EXPIRE_DUPS_FIRST
+setopt HIST_FIND_NO_DUPS
+setopt HIST_IGNORE_ALL_DUPS
+setopt HIST_IGNORE_SPACE
+setopt HIST_REDUCE_BLANKS
+setopt SHARE_HISTORY
+
+# Completion cache.
+autoload -Uz compinit
+compinit -d "$XDG_CACHE_HOME/zsh/zcompdump"
+
+# Interactive widgets require a real terminal-backed ZLE session.
+if [[ -o zle && -t 0 && -t 1 ]]; then
+  command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
+  command -v fzf >/dev/null && source <(fzf --zsh)
+fi
+command -v direnv >/dev/null && eval "$(direnv hook zsh)"
+if [[ -t 0 && -t 1 && "${TERM:-dumb}" != dumb && -x /usr/bin/starship ]]; then
+  eval "$(/usr/bin/starship init zsh)"
+fi
+
+alias ll='eza --long --all --group-directories-first --git --header --hyperlink'
+alias lt='eza --tree --group-directories-first --header --hyperlink'
+[[ -r ${ZDOTDIR}/.zshrc.local ]] && source ${ZDOTDIR}/.zshrc.local

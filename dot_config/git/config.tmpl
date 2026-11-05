@@ -1,0 +1,43 @@
+[user]
+	name = {{ .name | quote }}
+	email = {{ .email | quote }}
+	signingkey = {{ .chezmoi.homeDir }}/.ssh/windows_id_ed25519.pub
+[gpg]
+	format = ssh
+[gpg "ssh"]
+	allowedSignersFile = {{ .chezmoi.homeDir }}/.config/git/allowed_signers
+	program = {{ .chezmoi.homeDir }}/.local/bin/wsl-ssh-sign
+[commit]
+	gpgsign = true
+[tag]
+	gpgsign = true
+[init]
+	defaultBranch = main
+[core]
+	autocrlf = input
+	pager = delta
+[credential]
+	helper = {{ .chezmoi.homeDir }}/.local/lib/win32/git-credential-manager.exe
+[fetch]
+	prune = true
+	pruneTags = true
+[push]
+	autoSetupRemote = true
+[pull]
+	ff = only
+[interactive]
+	diffFilter = delta --color-only
+[delta]
+	navigate = true
+[merge]
+	conflictStyle = zdiff3
+[diff]
+	colorMoved = default
+	algorithm = histogram
+[rebase]
+	autoStash = true
+	updateRefs = true
+[rerere]
+	enabled = true
+[branch]
+	sort = -committerdate

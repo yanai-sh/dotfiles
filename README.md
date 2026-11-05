@@ -2,7 +2,7 @@
 
 Personal machine config for a **three-root** host: WSL (Linux source), ReFS Dev Drive (Windows apps), NTFS `C:` (host imaging + SDKs + agent stores).
 
-Chezmoi source state and apply templates live here as they grow. Until then, the operating model is documented under [`docs/`](docs/).
+Chezmoi applies this repository twice: once into the Windows profile and once into the Fedora home. `README.md` and `docs/` stay in git and are ignored on apply. The private key is not in this repository.
 
 ## Docs
 

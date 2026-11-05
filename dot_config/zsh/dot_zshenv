@@ -1,0 +1,29 @@
+# Keep Linux commands authoritative. Selected Windows executables are exposed
+# only through the generated bridge directory.
+typeset -U path PATH
+path=(
+  "$HOME/.local/bin"
+  "$HOME/.local/lib/win32"
+  /usr/local/sbin
+  /usr/local/bin
+  /usr/sbin
+  /usr/bin
+  /sbin
+  /bin
+)
+linux_tools=(/usr/lib/linux-tools/*/bin(N))
+(( ${#linux_tools} )) && path+=("${linux_tools[@]}")
+unset linux_tools
+export PATH
+
+export MANPAGER="bat -plman"
+export RIPGREP_CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/ripgrep/config"
+case ":${_ZO_EXCLUDE_DIRS:-}:" in
+  *:/mnt:*) ;;
+  *) export _ZO_EXCLUDE_DIRS="/mnt${_ZO_EXCLUDE_DIRS:+:${_ZO_EXCLUDE_DIRS}}" ;;
+esac
+export FZF_CTRL_T_COMMAND="fd --type f --type d --strip-cwd-prefix"
+export FZF_ALT_C_COMMAND="fd --type d --strip-cwd-prefix"
+export FZF_CTRL_T_OPTS="--preview 'bat -n --color=always {}'"
+export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wsl2-ssh-agent.sock"
+[[ -r ${ZDOTDIR}/.zshenv.local ]] && source ${ZDOTDIR}/.zshenv.local
