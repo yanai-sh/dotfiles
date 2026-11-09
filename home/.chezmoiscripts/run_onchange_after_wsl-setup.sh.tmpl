@@ -1,0 +1,32 @@
+{{- if .isWSL -}}
+#!/bin/sh
+# Rerun triggers: unit file hash and whether systemd is running.
+# wsl2-ssh-agent.service: {{ include "dot_config/systemd/user/wsl2-ssh-agent.service" | sha256sum }}
+# systemd running: {{ if stat "/run/systemd/system" }}yes{{ else }}no{{ end }}
+set -eu
+
+desired='[boot]
+systemd=true
+
+[interop]
+appendWindowsPath=false
+
+[user]
+default={{ .chezmoi.username }}'
+
+if [ "$(cat /etc/wsl.conf 2>/dev/null || true)" != "$desired" ]; then
+    if [ -f /etc/wsl.conf ] && [ ! -e /etc/wsl.conf.bak ]; then
+        sudo cp /etc/wsl.conf /etc/wsl.conf.bak
+        echo "Saved the previous /etc/wsl.conf as /etc/wsl.conf.bak"
+    fi
+    printf '%s\n' "$desired" | sudo tee /etc/wsl.conf >/dev/null
+    echo "Updated /etc/wsl.conf. Run 'wsl.exe --shutdown' from Windows, reopen the distro, then run 'chezmoi apply' again."
+fi
+
+if [ -d /run/systemd/system ]; then
+    systemctl --user daemon-reload
+    systemctl --user enable --now wsl2-ssh-agent.service
+else
+    echo "systemd is not running; wsl2-ssh-agent.service is enabled on the next 'chezmoi apply' after the WSL restart."
+fi
+{{ end -}}

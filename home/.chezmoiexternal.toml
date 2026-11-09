@@ -1,0 +1,8 @@
+{{/* Latest release, refreshed weekly. A fixed checksum would reject the next release. */}}
+{{- if .isWSL }}
+[".local/bin/wsl2-ssh-agent"]
+    type = "file"
+    url = "https://github.com/mame/wsl2-ssh-agent/releases/latest/download/wsl2-ssh-agent{{ if eq .chezmoi.arch "arm64" }}-arm64{{ end }}"
+    executable = true
+    refreshPeriod = "168h"
+{{- end }}

@@ -1,0 +1,8 @@
+.direnv/
+.envrc.local
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,63 @@
+[user]
+	name = Yanai
+	email = me@yanai.sh
+	signingKey = key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDUe9cd98c1pBnPkaXt79cX08x4yAchgwgdNWRH61i30
+[gpg]
+	format = ssh
+[gpg "ssh"]
+	allowedSignersFile = ~/.config/git/allowed_signers
+{{- if .isWSL }}
+	program = {{ .chezmoi.homeDir }}/.local/bin/wsl-ssh-sign
+{{- else if eq .chezmoi.os "windows" }}
+	# Git for Windows bundles an MSYS ssh-keygen that cannot reach the Windows agent.
+	program = C:/Windows/System32/OpenSSH/ssh-keygen.exe
+{{- end }}
+[commit]
+	gpgSign = true
+[tag]
+	gpgSign = true
+[init]
+	defaultBranch = main
+[core]
+	autocrlf = input
+{{- if eq .chezmoi.os "windows" }}
+	sshCommand = C:/Windows/System32/OpenSSH/ssh.exe
+{{- end }}
+{{- if lookPath "delta" }}
+	pager = delta
+[interactive]
+	diffFilter = delta --color-only
+[delta]
+	navigate = true
+{{- end }}
+{{- if .isWSL }}
+{{-   if includeTemplate "gcm-path" . | trim }}
+[credential]
+	helper = {{ .chezmoi.homeDir }}/.local/lib/win32/git-credential-manager.exe
+{{-   end }}
+{{- else if eq .chezmoi.os "windows" }}
+[credential]
+	helper = manager
+{{- end }}
+[fetch]
+	prune = true
+	pruneTags = true
+[push]
+	autoSetupRemote = true
+[pull]
+	ff = only
+[merge]
+	conflictStyle = zdiff3
+[diff]
+	colorMoved = default
+	algorithm = histogram
+[rebase]
+	autoStash = true
+	updateRefs = true
+[rerere]
+	enabled = true
+[branch]
+	sort = -committerdate
+# Unmanaged per-machine settings. Git skips the include when the file is missing.
+[include]
+	path = ~/.config/git/config.local

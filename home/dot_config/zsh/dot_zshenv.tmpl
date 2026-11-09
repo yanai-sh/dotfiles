@@ -1,0 +1,42 @@
+# Tool data under the XDG directories instead of $HOME.
+# CARGO_HOME and RUSTUP_HOME must be set before rustup installs into them.
+export CARGO_HOME="$XDG_DATA_HOME/cargo"
+export RUSTUP_HOME="$XDG_DATA_HOME/rustup"
+export NPM_CONFIG_USERCONFIG="$XDG_CONFIG_HOME/npm/npmrc"
+export npm_config_cache="$XDG_CACHE_HOME/npm"
+export PYTHON_HISTORY="$XDG_STATE_HOME/python_history"
+export NODE_REPL_HISTORY="$XDG_STATE_HOME/node_repl_history"
+
+{{ if .isWSL -}}
+# Keep Linux commands authoritative: drop Windows /mnt entries from the
+# inherited PATH. Selected Windows executables are exposed only through the
+# ~/.local/lib/win32 bridge directory.
+{{ end -}}
+typeset -U path PATH
+path=(
+  "$HOME/.local/bin"
+{{- if .isWSL }}
+  "$HOME/.local/lib/win32"
+{{- end }}
+  "$CARGO_HOME/bin"
+  ${path:#/mnt/*}
+)
+export PATH
+
+if command -v bat >/dev/null; then
+  export MANPAGER="bat -plman"
+fi
+export RIPGREP_CONFIG_PATH="$XDG_CONFIG_HOME/ripgrep/config"
+{{- if .isWSL }}
+case ":${_ZO_EXCLUDE_DIRS:-}:" in
+  *:/mnt:*) ;;
+  *) export _ZO_EXCLUDE_DIRS="/mnt${_ZO_EXCLUDE_DIRS:+:${_ZO_EXCLUDE_DIRS}}" ;;
+esac
+{{- end }}
+export FZF_CTRL_T_COMMAND="fd --type f --type d --strip-cwd-prefix"
+export FZF_ALT_C_COMMAND="fd --type d --strip-cwd-prefix"
+export FZF_CTRL_T_OPTS="--preview 'bat -n --color=always {}'"
+{{- if .isWSL }}
+export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wsl2-ssh-agent.sock"
+{{- end }}
+[[ -r ${ZDOTDIR}/.zshenv.local ]] && source ${ZDOTDIR}/.zshenv.local

@@ -1,0 +1,25 @@
+{{- $target := "" -}}
+{{- $candidates := list
+      "/mnt/c/Program Files/Git/clangarm64/bin/git-credential-manager.exe"
+      "/mnt/c/Program Files/Git/mingw64/bin/git-credential-manager.exe"
+      "/mnt/c/Program Files/Git/mingw64/libexec/git-core/git-credential-manager.exe"
+-}}
+{{- $ps := "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe" -}}
+{{- if stat $ps -}}
+{{-   $local := output $ps "-NoProfile" "-Command" "[Environment]::GetFolderPath('LocalApplicationData')" | trim -}}
+{{-   if $local -}}
+{{-     $slash := $local | replace "\\" "/" -}}
+{{-     $rest := $slash | trimPrefix ($slash | substr 0 2) -}}
+{{-     $root := printf "/mnt/%s%s" ($slash | substr 0 1 | lower) $rest -}}
+{{-     $candidates = concat $candidates (list
+          (printf "%s/Programs/Git/clangarm64/bin/git-credential-manager.exe" $root)
+          (printf "%s/Programs/Git/mingw64/bin/git-credential-manager.exe" $root)
+          (printf "%s/Programs/Git/mingw64/libexec/git-core/git-credential-manager.exe" $root)) -}}
+{{-   end -}}
+{{- end -}}
+{{- range $candidates -}}
+{{-   if and (not $target) (stat .) -}}
+{{-     $target = . -}}
+{{-   end -}}
+{{- end -}}
+{{- $target -}}

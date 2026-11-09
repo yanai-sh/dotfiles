@@ -1,6 +1,4 @@
-# Persistent, deduplicated history.
-export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
-export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+# Persistent, deduplicated history. XDG_* come from ~/.zshenv.
 mkdir -p "$XDG_STATE_HOME/zsh" "$XDG_CACHE_HOME/zsh"
 HISTFILE="$XDG_STATE_HOME/zsh/history"
 HISTSIZE=50000
@@ -24,8 +22,8 @@ if [[ -o zle && -t 0 && -t 1 ]]; then
   command -v fzf >/dev/null && source <(fzf --zsh)
 fi
 command -v direnv >/dev/null && eval "$(direnv hook zsh)"
-if [[ -t 0 && -t 1 && "${TERM:-dumb}" != dumb && -x /usr/bin/starship ]]; then
-  eval "$(/usr/bin/starship init zsh)"
+if [[ -t 0 && -t 1 && "${TERM:-dumb}" != dumb ]] && command -v starship >/dev/null; then
+  eval "$(starship init zsh)"
 fi
 
 alias ll='eza --long --all --group-directories-first --git --header --hyperlink'

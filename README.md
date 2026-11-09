@@ -1,18 +1,48 @@
 # Dotfiles
 
-Personal machine config for a **three-root** host: WSL (Linux source), ReFS Dev Drive (Windows apps), NTFS `C:` (host imaging + SDKs + agent stores).
+Managed with [chezmoi](https://www.chezmoi.io/). The source state is in `home/`; see [Design](docs/design.md).
 
-Chezmoi applies this repository twice: once into the Windows profile and once into the Fedora home. `README.md` and `docs/` stay in git and are ignored on apply. The private key is not in this repository.
+The repo is cloned to `~/dotfiles` in every home. On WSL that clone is a real directory inside the distro, not a symlink to `/mnt/c`.
 
-## Docs
+## Existing clone
 
-| Doc | Topic |
-|-----|--------|
-| [Three roots](docs/three-roots.md) | Where projects live, what never crosses roots |
-| [Chezmoi + caches + agents](docs/chezmoi-caches-agents.md) | Dotfiles vs caches vs Cursor/agent state |
+When `~/dotfiles` is already a git repo, point chezmoi at it, read the diff, then write the home. Chezmoi clones only when the source directory is not a repo, so no URL is needed.
 
-## Host facts (SL7)
+```sh
+chezmoi init --source "$HOME/dotfiles"
+chezmoi diff
+chezmoi apply
+```
 
-- Windows 11 ARM64, Asia/Jerusalem.
-- WinMint (host imaging) stays on NTFS under `C:\Users\yanai\Projects\winmint` — not on Dev Drive, not in WSL.
-- Product repo: [yanai-sh/winmint](https://github.com/yanai-sh/winmint). This repo is personal environment only.
+On Windows, the same commands in PowerShell use `$HOME\dotfiles`.
+
+## Fresh machine
+
+Use this only after this tree is on `origin/main`. Install the prerequisites first: chezmoi renders templates before its setup script runs.
+
+Windows:
+
+```powershell
+winget install --id twpayne.chezmoi -e
+winget install --id Git.Git -e
+chezmoi init --apply --source "$HOME\dotfiles" https://github.com/yanai-sh/dotfiles.git
+```
+
+Linux and WSL, from inside the distro:
+
+```sh
+sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin" init --apply --source "$HOME/dotfiles" https://github.com/yanai-sh/dotfiles.git
+```
+
+Open a new terminal and run `chezmoi apply` once more, so settings that depend on the newly installed PowerShell render. For signing and ssh, the Windows `ssh-agent` service must be running with the key loaded (`ssh-add`).
+
+On WSL the first apply writes `/etc/wsl.conf` (asks for `sudo`). Run `wsl.exe --shutdown` from Windows, reopen the distro, and run `chezmoi apply` again to start the ssh agent bridge.
+
+## Daily use
+
+```sh
+chezmoi edit --apply ~/.config/git/config   # edit a managed file
+chezmoi diff                                # preview
+chezmoi apply                               # write the home
+chezmoi update                              # pull and apply
+```

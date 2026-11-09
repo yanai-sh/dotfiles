@@ -1,0 +1,66 @@
+{{- if eq .chezmoi.os "windows" -}}
+# Windows bootstrap. Runs before files are written, and again whenever this
+# script's content changes. Must stay Windows PowerShell 5.1 compatible:
+# on a fresh install pwsh does not exist yet.
+$ErrorActionPreference = 'Stop'
+
+$packages = @(
+    'Git.Git'
+    'Microsoft.PowerShell'
+)
+
+# winget exit codes where the package is already present, including a newer
+# local install, or the install finished and asked for a reboot.
+# Install stays unversioned, so winget still requests the current package.
+$alreadyInstalled = @(
+    -1978335189 # no applicable update
+    -1978335135 # package already installed
+    -1978334963 # another version already installed
+    -1978334962 # higher version already installed
+    -1978334967 # reboot required to finish
+)
+
+function Set-UserEnvironmentVariable {
+    param([string]$Name, [string]$Value)
+    if ([Environment]::GetEnvironmentVariable($Name, 'User') -ne $Value) {
+        Write-Host "user env $Name = $Value"
+        [Environment]::SetEnvironmentVariable($Name, $Value, 'User')
+    }
+    Set-Item -Path "Env:$Name" -Value $Value
+}
+
+if (Get-Command -Name winget -ErrorAction SilentlyContinue) {
+    foreach ($id in $packages) {
+        Write-Host "winget install $id"
+        & winget install --id $id --exact --accept-package-agreements --accept-source-agreements --disable-interactivity
+        if ($alreadyInstalled -contains $LASTEXITCODE) {
+            Write-Host "$id already installed"
+        }
+        elseif ($LASTEXITCODE -ne 0) {
+            throw "winget install $id failed with exit $LASTEXITCODE"
+        }
+    }
+    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $env:Path = (@($machinePath, $userPath) | Where-Object { $_ }) -join ';'
+}
+else {
+    Write-Warning 'winget not found; skipping package installs.'
+}
+
+Set-UserEnvironmentVariable -Name 'RIPGREP_CONFIG_PATH' -Value (Join-Path $env:USERPROFILE '.config\ripgrep\config')
+
+$agent = Get-Service -Name ssh-agent -ErrorAction SilentlyContinue
+if (-not $agent) {
+    Write-Warning 'The OpenSSH Authentication Agent service is missing. Git signing and ssh push need it.'
+}
+elseif ($agent.Status -ne 'Running') {
+    Write-Warning 'ssh-agent is not running. From an elevated shell: Set-Service ssh-agent -StartupType Automatic; Start-Service ssh-agent'
+}
+
+$documents = [Environment]::GetFolderPath('MyDocuments')
+$expected = Join-Path $env:USERPROFILE 'Documents'
+if ($documents -ne $expected) {
+    Write-Warning "Documents resolves to $documents (folder redirection). PowerShell will not load the managed profile at $expected\PowerShell\profile.ps1."
+}
+{{ end -}}

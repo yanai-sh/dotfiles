@@ -1,2 +1,4 @@
 Include ~/.ssh/config.d/*
+{{- if .isWSL }}
 IdentityAgent /run/user/%i/wsl2-ssh-agent.sock
+{{- end }}

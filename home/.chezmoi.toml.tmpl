@@ -1,0 +1,13 @@
+{{- $wsl := and (eq .chezmoi.os "linux") (.chezmoi.kernel.osrelease | lower | contains "microsoft") -}}
+sourceDir = {{ joinPath .chezmoi.homeDir "dotfiles" | quote }}
+
+[data]
+    isWSL = {{ $wsl }}
+{{- if lookPath "delta" }}
+
+[diff]
+    pager = "delta"
+{{- end }}
+
+[git]
+    autoCommit = true

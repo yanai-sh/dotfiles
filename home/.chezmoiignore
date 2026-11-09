@@ -1,0 +1,23 @@
+{{- if ne .chezmoi.os "windows" }}
+Documents
+Documents/**
+{{- end }}
+
+{{- if eq .chezmoi.os "windows" }}
+.zshenv
+.config/zsh
+.config/zsh/**
+.ssh
+.ssh/**
+.local
+.local/**
+{{- end }}
+
+{{- if not .isWSL }}
+.config/systemd
+.config/systemd/**
+.local/lib/win32
+.local/lib/win32/**
+.local/bin/wsl-ssh-sign
+.local/bin/wsl2-ssh-agent
+{{- end }}
