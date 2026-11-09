@@ -7,11 +7,6 @@ export npm_config_cache="$XDG_CACHE_HOME/npm"
 export PYTHON_HISTORY="$XDG_STATE_HOME/python_history"
 export NODE_REPL_HISTORY="$XDG_STATE_HOME/node_repl_history"
 
-{{ if .isWSL -}}
-# Keep Linux commands authoritative: drop Windows /mnt entries from the
-# inherited PATH. Selected Windows executables are exposed only through the
-# ~/.local/lib/win32 bridge directory.
-{{ end -}}
 typeset -U path PATH
 path=(
   "$HOME/.local/bin"
@@ -19,14 +14,18 @@ path=(
   "$HOME/.local/lib/win32"
 {{- end }}
   "$CARGO_HOME/bin"
+{{- if .isWSL }}
+  {{/* Drop Windows /mnt entries. The win32 bridge above keeps the few Windows executables zsh should see. */}}
   ${path:#/mnt/*}
+{{- else }}
+  $path
+{{- end }}
 )
 export PATH
 
-if command -v bat >/dev/null; then
-  export MANPAGER="bat -plman"
-fi
+export MANPAGER="bat -plman"
 export RIPGREP_CONFIG_PATH="$XDG_CONFIG_HOME/ripgrep/config"
+export YAZI_CONFIG_HOME="$XDG_CONFIG_HOME/yazi"
 {{- if .isWSL }}
 case ":${_ZO_EXCLUDE_DIRS:-}:" in
   *:/mnt:*) ;;

@@ -3,11 +3,9 @@ sourceDir = {{ joinPath .chezmoi.homeDir "dotfiles" | quote }}
 
 [data]
     isWSL = {{ $wsl }}
-{{- if lookPath "delta" }}
 
 [diff]
     pager = "delta"
-{{- end }}
 
 [git]
     autoCommit = true

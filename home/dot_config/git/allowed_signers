@@ -1,1 +1,2 @@
+# Each commit email needs its own line with this same public key, including an email set in ~/.config/git/config.local.
 me@yanai.sh ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDUe9cd98c1pBnPkaXt79cX08x4yAchgwgdNWRH61i30

@@ -18,13 +18,23 @@ compinit -d "$XDG_CACHE_HOME/zsh/zcompdump"
 
 # Interactive widgets require a real terminal-backed ZLE session.
 if [[ -o zle && -t 0 && -t 1 ]]; then
-  command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
-  command -v fzf >/dev/null && source <(fzf --zsh)
+  eval "$(zoxide init zsh)"
+  source <(fzf --zsh)
 fi
-command -v direnv >/dev/null && eval "$(direnv hook zsh)"
-if [[ -t 0 && -t 1 && "${TERM:-dumb}" != dumb ]] && command -v starship >/dev/null; then
+if [[ -t 0 && -t 1 && "${TERM:-dumb}" != dumb ]]; then
   eval "$(starship init zsh)"
 fi
+
+# Yazi cannot cd the parent shell. `y` writes the last dir and cds so
+# zoxide's hook records it. `q` keeps the dir; `Q` leaves $PWD unchanged.
+function y() {
+  local tmp cwd
+  tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
+  command yazi "$@" --cwd-file="$tmp"
+  IFS= read -r -d '' cwd < "$tmp"
+  [ "$cwd" != "$PWD" ] && [ -d "$cwd" ] && builtin cd -- "$cwd" || true
+  command rm -f -- "$tmp"
+}
 
 alias ll='eza --long --all --group-directories-first --git --header --hyperlink'
 alias lt='eza --tree --group-directories-first --header --hyperlink'

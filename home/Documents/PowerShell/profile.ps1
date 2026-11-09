@@ -7,9 +7,28 @@ $__profileInitFiles = & {
     # -------------------------------------------------------------------------
     # 1. Environment & host introspection (fast-exit gate)
     # -------------------------------------------------------------------------
+    function Test-ProfileRunsScript {
+        param([string[]]$CommandLine)
+
+        $switchNames = 'Command', 'File', 'EncodedCommand', 'NonInteractive'
+        foreach ($argument in $CommandLine) {
+            if ($argument -notmatch '^-(.+)$') {
+                continue
+            }
+
+            $body = $Matches[1]
+            $hits = @($switchNames | Where-Object { $_.StartsWith($body, [System.StringComparison]::OrdinalIgnoreCase) })
+            if ($hits.Count -eq 1) {
+                return $true
+            }
+        }
+
+        $false
+    }
+
     $commandLine = [Environment]::GetCommandLineArgs()
     $keepsShellOpen = [bool]($commandLine -match '^-noe')
-    $runsScript = [bool]($commandLine -match '^-(c|command|f|file|e|ec|encodedcommand|noni|noninteractive)$')
+    $runsScript = Test-ProfileRunsScript -CommandLine $commandLine
 
     $isInteractive = [Environment]::UserInteractive -and
         (-not [Console]::IsInputRedirected) -and
@@ -19,6 +38,9 @@ $__profileInitFiles = & {
 
     # AI agent shells: Cursor, Claude Code, and agents that set AI_AGENT.
     $isAgentSession = [bool]($env:CURSOR_AGENT -or $env:CLAUDECODE -or $env:AI_AGENT -or $env:ACP_AGENT)
+
+    $env:RIPGREP_CONFIG_PATH = Join-Path $env:USERPROFILE '.config\ripgrep\config'
+    $env:YAZI_CONFIG_HOME = Join-Path $env:USERPROFILE '.config\yazi'
 
     # -------------------------------------------------------------------------
     # 2. UTF-8 console encoding (pwsh 7 already defaults $OutputEncoding)
@@ -33,16 +55,10 @@ $__profileInitFiles = & {
         [Console]::InputEncoding = $utf8NoBom
     }
 
-    $fnmExe = (Get-Command -Name fnm -CommandType Application -ErrorAction SilentlyContinue |
-        Select-Object -First 1).Source
-    $fnmArgs = @('env', '--shell', 'powershell', '--version-file-strategy', 'recursive')
-
     # Fast exit: skip UI, prompt hooks, and heavy tools in non-interactive
-    # sessions or agent tasks. Node stays on PATH for them.
+    # sessions or agent tasks. Starship is not loaded here, so neither is the
+    # transient prompt.
     if (-not $isInteractive -or $isAgentSession) {
-        if ($fnmExe) {
-            & $fnmExe @fnmArgs | Out-String | Invoke-Expression
-        }
         return
     }
 
@@ -50,23 +66,17 @@ $__profileInitFiles = & {
     # 3. Interactive shell enhancements (Windows Terminal, Cursor, Zed)
     # -------------------------------------------------------------------------
 
-    # PSReadLine: only non-default settings.
-    if (Get-Command -Name Set-PSReadLineOption -ErrorAction SilentlyContinue) {
-        Set-PSReadLineOption -HistorySearchCursorMovesToEnd
-        Set-PSReadLineOption -BellStyle None
-        Set-PSReadLineOption -ContinuationPrompt '  '
-        Set-PSReadLineOption -Colors @{
-            InlinePrediction = "$([char]0x1b)[38;5;242m"
-        }
+    Set-PSReadLineOption -HistorySearchCursorMovesToEnd
+    Set-PSReadLineOption -BellStyle None
+    Set-PSReadLineOption -ContinuationPrompt '  '
 
-        Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
-        Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
-        Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+RightArrow' -Function ForwardWord
-    }
+    Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
+    Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
+    Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+    Set-PSReadLineKeyHandler -Chord 'Ctrl+RightArrow' -Function ForwardWord
 
     # -------------------------------------------------------------------------
-    # 4. Disk-cached init scripts (Starship, Zoxide, gh, Docker)
+    # 4. Disk-cached init scripts (Starship, Zoxide)
     # -------------------------------------------------------------------------
     $initCacheDir = Join-Path $env:LOCALAPPDATA 'PowerShell\InitCache'
     $initFiles = [System.Collections.Generic.List[string]]::new()
@@ -96,14 +106,12 @@ $__profileInitFiles = & {
             [scriptblock]$Generator
         )
 
-        $exe = Get-Command -Name $ToolName -CommandType Application -ErrorAction SilentlyContinue |
+        $exe = Get-Command -Name $ToolName -CommandType Application -ErrorAction Stop |
             Select-Object -First 1
-        if (-not $exe) {
-            return
-        }
 
         $real = Get-Item -LiteralPath (Resolve-ToolPath $exe.Source) -ErrorAction SilentlyContinue
-        $stamp = if ($real) { '{0}-{1}' -f $real.Length, $real.LastWriteTimeUtc.Ticks } else { 'unknown' }
+        $profileTicks = (Get-Item -LiteralPath $PSCommandPath).LastWriteTimeUtc.Ticks
+        $stamp = if ($real) { '{0}-{1}-{2}' -f $real.Length, $real.LastWriteTimeUtc.Ticks, $profileTicks } else { "unknown-$profileTicks" }
         $cacheFile = Join-Path $initCacheDir "$ToolName-$stamp.ps1"
 
         if (-not (Test-Path -LiteralPath $cacheFile)) {
@@ -122,17 +130,14 @@ $__profileInitFiles = & {
         }
     }
 
-    # Starship transient prompt (\e[0J clears leftovers below the prompt).
-    if (Get-Command -Name starship -ErrorAction SilentlyContinue) {
-        function global:Invoke-Starship-TransientFunction {
-            $clearBelow = "$([char]0x1b)[0J"
+    function global:Invoke-Starship-TransientFunction {
+        $clearBelow = "$([char]0x1b)[0J"
 
-            if ($global:LASTEXITCODE -eq 0) {
-                "$clearBelow$($PSStyle.Bold)$($PSStyle.Foreground.Green)❯$($PSStyle.Reset) "
-            }
-            else {
-                "$clearBelow$($PSStyle.Bold)$($PSStyle.Foreground.BrightRed)❯$($PSStyle.Reset) "
-            }
+        if ($global:LASTEXITCODE -eq 0) {
+            "$clearBelow$($PSStyle.Bold)$($PSStyle.Foreground.Green)❯$($PSStyle.Reset) "
+        }
+        else {
+            "$clearBelow$($PSStyle.Bold)$($PSStyle.Foreground.BrightRed)❯$($PSStyle.Reset) "
         }
     }
 
@@ -140,42 +145,52 @@ $__profileInitFiles = & {
         & starship init powershell --print-full-init | Out-String
     }
 
-    Add-CachedInit -ToolName 'gh' -Generator {
-        & gh completion -s powershell | Out-String
-    }
-
-    Add-CachedInit -ToolName 'docker' -Generator {
-        & docker completion powershell | Out-String
-    }
-
     # Zoxide last: it hooks the prompt that Starship defines.
     Add-CachedInit -ToolName 'zoxide' -Generator {
         & zoxide init powershell | Out-String
     }
 
-    # -------------------------------------------------------------------------
-    # 5. fnm & Node toolchain
-    # -------------------------------------------------------------------------
-    if ($fnmExe) {
-        & $fnmExe @fnmArgs --use-on-cd | Out-String | Invoke-Expression
-    }
+    # Yazi cannot Set-Location the parent. `y` cds after quit so zoxide records it.
+    # `q` keeps the dir; `Q` leaves $PWD unchanged.
+    function global:y {
+        param([Parameter(ValueFromRemainingArguments)][string[]]$YaziArgs)
 
-    # -------------------------------------------------------------------------
-    # 6. winget completion (https://learn.microsoft.com/windows/package-manager/winget/tab-completion)
-    # -------------------------------------------------------------------------
-    if (Get-Command -Name winget -ErrorAction SilentlyContinue) {
-        Register-ArgumentCompleter -Native -CommandName winget -ScriptBlock {
-            param($wordToComplete, $commandAst, $cursorPosition)
-
-            [Console]::InputEncoding = [Console]::OutputEncoding = $OutputEncoding = [System.Text.Utf8Encoding]::new()
-            $word = $wordToComplete.Replace('"', '""')
-            $ast = $commandAst.ToString().Replace('"', '""')
-            winget complete --word="$word" --commandline "$ast" --position $cursorPosition | ForEach-Object {
-                [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        $tmp = [System.IO.Path]::GetTempFileName()
+        try {
+            & yazi @YaziArgs --cwd-file=$tmp
+            if (-not (Test-Path -LiteralPath $tmp)) {
+                return
             }
+
+            $cwd = ([System.IO.File]::ReadAllText($tmp) -split ([char]0), 2)[0].Trim()
+            if ($cwd -and (Test-Path -LiteralPath $cwd) -and $cwd -ne $PWD.Path) {
+                Set-Location -LiteralPath $cwd
+            }
+        }
+        finally {
+            Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
         }
     }
 
+    # -------------------------------------------------------------------------
+    # 5. winget and scoop tab completion
+    # -------------------------------------------------------------------------
+    Register-ArgumentCompleter -Native -CommandName winget -ScriptBlock {
+        param($wordToComplete, $commandAst, $cursorPosition)
+
+        [Console]::InputEncoding = [Console]::OutputEncoding = $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+        $word = $wordToComplete.Replace('"', '""')
+        $ast = $commandAst.ToString().Replace('"', '""')
+        winget complete --word="$word" --commandline "$ast" --position $cursorPosition | ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+    }
+
+    $scoopCmd = Get-Command -Name scoop -CommandType Application -ErrorAction Stop
+    $scoopRoot = (Get-Item -LiteralPath $scoopCmd.Source).Directory.Parent.FullName
+    Import-Module (Join-Path $scoopRoot 'modules\scoop-completion') -Global
+
+    $script:ChezmoiEnableTransientPrompt = $true
     $initFiles
 }
 
@@ -184,6 +199,7 @@ foreach ($__initFile in $__profileInitFiles) {
 }
 Remove-Variable -Name __profileInitFiles, __initFile -ErrorAction SilentlyContinue
 
-if (Get-Command -Name Enable-TransientPrompt -ErrorAction SilentlyContinue) {
+if ($ChezmoiEnableTransientPrompt) {
     Enable-TransientPrompt
 }
+Remove-Variable -Name ChezmoiEnableTransientPrompt -ErrorAction SilentlyContinue

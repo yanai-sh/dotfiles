@@ -1,0 +1,195 @@
+{{- if eq .chezmoi.os "windows" -}}
+# CaskaydiaCove Nerd Font for Windows Terminal, plus scoop tab completion.
+# Runs on every apply, before files are written. chezmoi runs it with pwsh.
+# PowerShell 7 or newer must already be installed.
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $false
+
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    throw 'PowerShell 7 or newer is required before chezmoi apply. Install it with: winget install --id Microsoft.PowerShell -e'
+}
+
+$fontFace = 'CaskaydiaCove NF'
+$scoopPackage = 'CascadiaCode-NF'
+$nerdFontsBucket = 'https://github.com/matthewjberger/scoop-nerd-fonts'
+
+function Get-ScoopRoot {
+    if ($env:SCOOP) {
+        return $env:SCOOP
+    }
+
+    $userScoop = [Environment]::GetEnvironmentVariable('SCOOP', 'User')
+    if ($userScoop) {
+        return $userScoop
+    }
+
+    Join-Path $env:USERPROFILE 'scoop'
+}
+
+function Invoke-Scoop {
+    param([Parameter(ValueFromRemainingArguments)][string[]]$Argument)
+
+    $command = Join-Path (Get-ScoopRoot) 'shims\scoop.cmd'
+    if (-not (Test-Path -LiteralPath $command)) {
+        throw "scoop is not installed at $command"
+    }
+
+    & $command @Argument
+}
+
+function Install-ScoopPackage {
+    param([Parameter(Mandatory)][string]$Name)
+
+    Invoke-Scoop prefix $Name | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    Write-Host "scoop install $Name"
+    Invoke-Scoop install $Name
+    if ($LASTEXITCODE -ne 0) {
+        throw "scoop install $Name failed with exit $LASTEXITCODE"
+    }
+}
+
+function Set-WindowsTerminalDefaultFont {
+    param(
+        [Parameter(Mandatory)][string]$Json,
+        [Parameter(Mandatory)][string]$Face
+    )
+
+    $leading = ''
+    $body = $Json
+    if ($Json -match '(?s)\A(\s*(?://[^\r\n]*(?:\r?\n|$)|/\*.*?\*/\s*)+)') {
+        $leading = $Matches[1]
+        $body = $Json.Substring($leading.Length)
+    }
+
+    $documentOptions = [System.Text.Json.JsonDocumentOptions]::new()
+    $documentOptions.CommentHandling = [System.Text.Json.JsonCommentHandling]::Skip
+    $documentOptions.AllowTrailingCommas = $true
+    $nodeOptions = [System.Text.Json.Nodes.JsonNodeOptions]::new()
+
+    $root = [System.Text.Json.Nodes.JsonNode]::Parse($body, $nodeOptions, $documentOptions)
+    if ($root -isnot [System.Text.Json.Nodes.JsonObject]) {
+        throw 'Windows Terminal settings are not a JSON object.'
+    }
+
+    $profiles = $root['profiles']
+    if ($profiles -is [System.Text.Json.Nodes.JsonArray]) {
+        $wrapped = [System.Text.Json.Nodes.JsonObject]::new()
+        $wrapped['list'] = $profiles.DeepClone()
+        $root['profiles'] = $wrapped
+        $profiles = $wrapped
+    }
+    elseif ($null -eq $profiles) {
+        $profiles = [System.Text.Json.Nodes.JsonObject]::new()
+        $root['profiles'] = $profiles
+    }
+    elseif ($profiles -isnot [System.Text.Json.Nodes.JsonObject]) {
+        throw 'Windows Terminal profiles value is not an object.'
+    }
+
+    $defaults = $profiles['defaults']
+    if ($defaults -isnot [System.Text.Json.Nodes.JsonObject]) {
+        $defaults = [System.Text.Json.Nodes.JsonObject]::new()
+        $profiles['defaults'] = $defaults
+    }
+
+    $font = $defaults['font']
+    $currentFace = $null
+    if ($font -is [System.Text.Json.Nodes.JsonObject] -and $null -ne $font['face']) {
+        $currentFace = $font['face'].GetValue[string]()
+    }
+
+    if ($currentFace -eq $Face -and $null -eq $defaults['fontFace']) {
+        return $Json
+    }
+
+    if ($font -isnot [System.Text.Json.Nodes.JsonObject]) {
+        $font = [System.Text.Json.Nodes.JsonObject]::new()
+        $defaults['font'] = $font
+    }
+
+    $font['face'] = $Face
+    if ($null -ne $defaults['fontFace']) {
+        $null = $defaults.Remove('fontFace')
+    }
+
+    $writeOptions = [System.Text.Json.JsonSerializerOptions]::new()
+    $writeOptions.WriteIndented = $true
+    $leading + $root.ToJsonString($writeOptions) + "`n"
+}
+
+if (-not (Test-Path -LiteralPath (Join-Path (Get-ScoopRoot) 'shims\scoop.cmd'))) {
+    $policy = Get-ExecutionPolicy -Scope CurrentUser
+    if ($policy -notin 'RemoteSigned', 'Unrestricted', 'Bypass') {
+        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+    }
+
+    Write-Host 'install scoop'
+    Invoke-RestMethod -Uri 'https://get.scoop.sh' | Invoke-Expression
+    $env:SCOOP = Get-ScoopRoot
+}
+
+$bucketDir = Join-Path (Get-ScoopRoot) 'buckets\nerd-fonts'
+if (-not (Test-Path -LiteralPath $bucketDir)) {
+    Write-Host 'scoop bucket add nerd-fonts'
+    Invoke-Scoop bucket add nerd-fonts $nerdFontsBucket
+    if ($LASTEXITCODE -ne 0) {
+        throw "scoop bucket add nerd-fonts failed with exit $LASTEXITCODE"
+    }
+}
+
+$extrasDir = Join-Path (Get-ScoopRoot) 'buckets\extras'
+if (-not (Test-Path -LiteralPath $extrasDir)) {
+    Write-Host 'scoop bucket add extras'
+    Invoke-Scoop bucket add extras
+    if ($LASTEXITCODE -ne 0) {
+        throw "scoop bucket add extras failed with exit $LASTEXITCODE"
+    }
+}
+
+Install-ScoopPackage -Name $scoopPackage
+Install-ScoopPackage -Name 'scoop-completion'
+
+$settingsPaths = @(
+    (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json')
+    (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json')
+    (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminalCanary_8wekyb3d8bbwe\LocalState\settings.json')
+    (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json')
+)
+
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+$foundSettings = $false
+foreach ($settingsPath in $settingsPaths) {
+    if (-not (Test-Path -LiteralPath $settingsPath)) {
+        continue
+    }
+
+    $foundSettings = $true
+    $bytes = [System.IO.File]::ReadAllBytes($settingsPath)
+    $hasBom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+    $text = $utf8.GetString($bytes)
+    if ($text.Length -gt 0 -and [int]$text[0] -eq 0xFEFF) {
+        $text = $text.Substring(1)
+        $hasBom = $true
+    }
+
+    $updated = Set-WindowsTerminalDefaultFont -Json $text -Face $fontFace
+    if ($updated -eq $text) {
+        continue
+    }
+
+    Write-Host "Windows Terminal default font = $fontFace ($settingsPath)"
+    $payload = $utf8.GetBytes($updated)
+    if ($hasBom) {
+        $payload = [byte[]](0xEF, 0xBB, 0xBF) + $payload
+    }
+    [System.IO.File]::WriteAllBytes($settingsPath, $payload)
+}
+
+if (-not $foundSettings) {
+    Write-Warning 'Windows Terminal has no settings.json yet. Open it once, then run chezmoi apply again to set the default font.'
+}
+{{ end -}}

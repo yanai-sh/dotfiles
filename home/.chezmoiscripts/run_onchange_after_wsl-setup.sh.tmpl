@@ -5,22 +5,120 @@
 # systemd running: {{ if stat "/run/systemd/system" }}yes{{ else }}no{{ end }}
 set -eu
 
-desired='[boot]
-systemd=true
+# Ensure three keys; leave every other line in /etc/wsl.conf unchanged.
+wsl_user='{{ .chezmoi.username | replace "'" "'\\''" }}'
+tmp="/tmp/wsl.conf.chezmoi.$$"
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
 
-[interop]
-appendWindowsPath=false
+src=/etc/wsl.conf
+if [ ! -f "$src" ]; then
+    src=/dev/null
+fi
 
-[user]
-default={{ .chezmoi.username }}'
+WSL_DEFAULT_USER="$wsl_user" awk '
+BEGIN {
+    user = ENVIRON["WSL_DEFAULT_USER"]
+    sec[1] = "boot";    key[1] = "systemd";           val[1] = "true"
+    sec[2] = "interop"; key[2] = "appendWindowsPath"; val[2] = "false"
+    sec[3] = "user";    key[3] = "default";           val[3] = user
+    nsec = 3
+}
 
-if [ "$(cat /etc/wsl.conf 2>/dev/null || true)" != "$desired" ]; then
+function trim(s) {
+    sub(/^[ \t]+/, "", s)
+    sub(/[ \t]+$/, "", s)
+    return s
+}
+
+function section_of(line,    s) {
+    if (line ~ /^[ \t]*[;#]/) return ""
+    if (match(line, /^[ \t]*\[[^]]+\]/)) {
+        s = substr(line, RSTART, RLENGTH)
+        sub(/^[ \t]*\[/, "", s)
+        sub(/\]$/, "", s)
+        return trim(s)
+    }
+    return ""
+}
+
+function key_of(line,    s) {
+    if (line ~ /^[ \t]*[;#]/) return ""
+    if (line ~ /^[ \t]*\[/) return ""
+    if (!match(line, /^[ \t]*[^= \t]+[ \t]*=/)) return ""
+    s = substr(line, RSTART, RLENGTH)
+    sub(/^[ \t]*/, "", s)
+    sub(/[ \t]*=$/, "", s)
+    return s
+}
+
+function value_of(line,    s) {
+    s = line
+    sub(/^[^=]*=/, "", s)
+    sub(/\r$/, "", s)
+    sub(/[ \t]+#.*$/, "", s)
+    return trim(s)
+}
+
+{
+    n++
+    lines[n] = $0
+}
+
+END {
+    section = ""
+    for (i = 1; i <= n; i++) {
+        s = section_of(lines[i])
+        if (s != "") {
+            section = s
+            for (d = 1; d <= nsec; d++) {
+                if (s == sec[d] && have[d] != 1) {
+                    have[d] = 1
+                    header[d] = i
+                }
+            }
+            continue
+        }
+        k = key_of(lines[i])
+        if (k == "") continue
+        for (d = 1; d <= nsec; d++) {
+            if (section == sec[d] && k == key[d]) {
+                seen[d] = 1
+                if (value_of(lines[i]) != val[d]) lines[i] = key[d] "=" val[d]
+            }
+        }
+    }
+
+    for (i = 1; i <= n; i++) {
+        s = section_of(lines[i])
+        out[++m] = lines[i]
+        if (s == "") continue
+        for (d = 1; d <= nsec; d++) {
+            if (s == sec[d] && header[d] == i && seen[d] != 1) {
+                out[++m] = key[d] "=" val[d]
+                seen[d] = 1
+            }
+        }
+    }
+
+    for (d = 1; d <= nsec; d++) {
+        if (seen[d] != 1) {
+            if (m > 0 && out[m] != "") out[++m] = ""
+            out[++m] = "[" sec[d] "]"
+            out[++m] = key[d] "=" val[d]
+        }
+    }
+
+    for (i = 1; i <= m; i++) print out[i]
+}
+' "$src" > "$tmp"
+
+if [ ! -f /etc/wsl.conf ] || ! cmp -s /etc/wsl.conf "$tmp"; then
     if [ -f /etc/wsl.conf ] && [ ! -e /etc/wsl.conf.bak ]; then
         sudo cp /etc/wsl.conf /etc/wsl.conf.bak
         echo "Saved the previous /etc/wsl.conf as /etc/wsl.conf.bak"
     fi
-    printf '%s\n' "$desired" | sudo tee /etc/wsl.conf >/dev/null
-    echo "Updated /etc/wsl.conf. Run 'wsl.exe --shutdown' from Windows, reopen the distro, then run 'chezmoi apply' again."
+    sudo tee /etc/wsl.conf >/dev/null < "$tmp"
+    echo "Updated /etc/wsl.conf. Run 'wsl.exe --shutdown' when values changed."
 fi
 
 if [ -d /run/systemd/system ]; then

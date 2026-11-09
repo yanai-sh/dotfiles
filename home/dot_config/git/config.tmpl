@@ -23,13 +23,11 @@
 {{- if eq .chezmoi.os "windows" }}
 	sshCommand = C:/Windows/System32/OpenSSH/ssh.exe
 {{- end }}
-{{- if lookPath "delta" }}
 	pager = delta
 [interactive]
 	diffFilter = delta --color-only
 [delta]
 	navigate = true
-{{- end }}
 {{- if .isWSL }}
 {{-   if includeTemplate "gcm-path" . | trim }}
 [credential]
@@ -41,7 +39,6 @@
 {{- end }}
 [fetch]
 	prune = true
-	pruneTags = true
 [push]
 	autoSetupRemote = true
 [pull]

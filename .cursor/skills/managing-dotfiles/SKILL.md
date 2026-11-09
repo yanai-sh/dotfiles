@@ -10,7 +10,7 @@ description: >-
 
 # Managing dotfiles
 
-The design is [docs/design.md](../../../docs/design.md). Read it before changing what lands on which home.
+The design is [docs/design.md](../../../docs/design.md). Read it before changing what lands on which home. This repo is vanilla+: nicer defaults for the stock terminal and git, not a workstation product.
 
 chezmoi manages this repo. `.chezmoiroot` makes `home/` the source state; the repo root (`README.md`, `docs/`, `.cursor/`) is never applied. Source names use chezmoi prefixes (`dot_`, `private_`, `executable_`, `symlink_`, `.tmpl`). There are four homes: this PC's Windows and WSL, and the desktop's Windows and bare-metal Linux. The only computed fact is `.isWSL` in `home/.chezmoi.toml.tmpl`.
 
@@ -19,11 +19,11 @@ chezmoi manages this repo. `.chezmoiroot` makes `home/` the source state; the re
 - Edit the source under `home/`, never the installed copy. Find a live file's source with `chezmoi source-path <target>`.
 - Classify each edit: shared, Windows, Linux, or WSL. Gate whole paths in `home/.chezmoiignore` (list both `dir` and `dir/**`); gate lines with `{{ if .isWSL }}` / `{{ if eq .chezmoi.os "windows" }}` in a `.tmpl`.
 - Git config is one file, `home/dot_config/git/config.tmpl`. Do not add `~/.gitconfig` or a second data file for name and email. Per-machine settings go in the unmanaged `~/.config/git/config.local`.
-- Windows packages are winget ids in `home/.chezmoiscripts/run_onchange_before_windows-bootstrap.ps1.tmpl`. Do not copy ids off the current machine. That script must stay Windows PowerShell 5.1 compatible. It does not set cache variables.
-- Templates render before any `run_before_` script, so a `lookPath` check sees the machine before the bootstrap installs anything.
-- Cache directories and the user variables that point at them live in `home/.chezmoiscripts/run_before_windows-caches.ps1.tmpl`, which runs on every apply and must stay Windows PowerShell 5.1 compatible. Do not create `D:\dev`. Cache config stores pointers (`D:\cache\...` on Windows, XDG dirs on Linux), not cache bodies.
+- Windows vanilla+ packages live in `home/.chezmoiscripts/run_onchange_before_windows-bootstrap.ps1.tmpl` as command-name to winget id. Do not copy ids off the current machine. The commands are `git`, `rg`, `starship`, `zoxide`, `fzf`, `yazi`, and `delta`. Install only when the command is missing from `PATH`; a failed install aborts apply. CaskaydiaCove NF is part of the look: `home/.chezmoiscripts/run_before_windows-font.ps1.tmpl` ensures scoop, the font, Terminal's default face, and `scoop-completion`. `delta` is an x64 Windows build; that emulation is acceptable because each run is a short process. PowerShell 7 or newer must already be installed; the script does not install it and refuses to run on Windows PowerShell 5.1. Do not add Docker, fnm, gh, direnv, eza-on-Windows, or cache-drive variables. Yazi, zoxide, and fzf stay integrated: `home/dot_config/yazi/init.lua` enables zoxide `update_db`, shells define `y`, and `YAZI_CONFIG_HOME` is `~/.config/yazi` on every home.
+- Templates render before any `run_before_` script, so a `lookPath` check sees the machine before ensure-install runs. Do not gate a vanilla+ tool on `lookPath` in git, chezmoi, zsh, or the pwsh profile. Those files call the commands directly, including starship and its transient prompt. Ensure-install belongs in the Windows scripts, not in the shell.
 - The repo lives at `~/dotfiles` in every home (`sourceDir`), never `~/src/dotfiles` or `~/.local/share/chezmoi`.
 - Do not create `~/src`. Do not add product checkout paths, scratch trees, or a host inventory.
+- OneDrive is removed on every Windows home. Documents is `~/Documents`. Do not detect folder redirection or add a fallback profile path.
 
 ## Change workflow
 

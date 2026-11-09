@@ -1,13 +1,27 @@
 {{- if eq .chezmoi.os "windows" -}}
 # Windows bootstrap. Runs before files are written, and again whenever this
-# script's content changes. Must stay Windows PowerShell 5.1 compatible:
-# on a fresh install pwsh does not exist yet.
+# script's content changes. chezmoi runs it with pwsh. PowerShell 7 or newer
+# must already be installed; this script does not install it.
 $ErrorActionPreference = 'Stop'
 
-$packages = @(
-    'Git.Git'
-    'Microsoft.PowerShell'
-)
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    throw 'PowerShell 7 or newer is required before chezmoi apply. Install it with: winget install --id Microsoft.PowerShell -e'
+}
+
+$PSNativeCommandUseErrorActionPreference = $false
+
+# Windows vanilla+ commands this config calls. Not a copy of this machine.
+# Install only when the command is missing. delta publishes only an x64
+# Windows build; each run is a short process, so emulation is negligible.
+$packages = [ordered]@{
+    git      = 'Git.Git'
+    rg       = 'BurntSushi.ripgrep.MSVC'
+    starship = 'Starship.Starship'
+    zoxide   = 'ajeetdsouza.zoxide'
+    fzf      = 'junegunn.fzf'
+    yazi     = 'sxyazi.yazi'
+    delta    = 'dandavison.delta'
+}
 
 # winget exit codes where the package is already present, including a newer
 # local install, or the install finished and asked for a reboot.
@@ -20,35 +34,45 @@ $alreadyInstalled = @(
     -1978334967 # reboot required to finish
 )
 
-function Set-UserEnvironmentVariable {
-    param([string]$Name, [string]$Value)
-    if ([Environment]::GetEnvironmentVariable($Name, 'User') -ne $Value) {
-        Write-Host "user env $Name = $Value"
-        [Environment]::SetEnvironmentVariable($Name, $Value, 'User')
-    }
-    Set-Item -Path "Env:$Name" -Value $Value
+if (-not (Get-Command -Name winget -ErrorAction SilentlyContinue)) {
+    throw 'winget is required before chezmoi apply. Install App Installer, then run apply again.'
 }
 
-if (Get-Command -Name winget -ErrorAction SilentlyContinue) {
-    foreach ($id in $packages) {
-        Write-Host "winget install $id"
-        & winget install --id $id --exact --accept-package-agreements --accept-source-agreements --disable-interactivity
-        if ($alreadyInstalled -contains $LASTEXITCODE) {
-            Write-Host "$id already installed"
-        }
-        elseif ($LASTEXITCODE -ne 0) {
-            throw "winget install $id failed with exit $LASTEXITCODE"
-        }
+foreach ($command in $packages.Keys) {
+    if (Get-Command -Name $command -CommandType Application -ErrorAction SilentlyContinue) {
+        Write-Host "$command already on PATH"
+        continue
     }
-    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $env:Path = (@($machinePath, $userPath) | Where-Object { $_ }) -join ';'
-}
-else {
-    Write-Warning 'winget not found; skipping package installs.'
-}
 
-Set-UserEnvironmentVariable -Name 'RIPGREP_CONFIG_PATH' -Value (Join-Path $env:USERPROFILE '.config\ripgrep\config')
+    $id = $packages[$command]
+    Write-Host "winget install $id"
+    & winget install --id $id --exact --accept-package-agreements --accept-source-agreements --disable-interactivity
+    if ($alreadyInstalled -contains $LASTEXITCODE) {
+        Write-Host "$id already installed"
+    }
+    elseif ($LASTEXITCODE -ne 0) {
+        throw "winget install $id failed with exit $LASTEXITCODE"
+    }
+}
+$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$env:Path = (@($machinePath, $userPath) | Where-Object { $_ }) -join ';'
+
+$rgConfig = Join-Path $env:USERPROFILE '.config\ripgrep\config'
+if ([Environment]::GetEnvironmentVariable('RIPGREP_CONFIG_PATH', 'User') -ne $rgConfig) {
+    Write-Host "user env RIPGREP_CONFIG_PATH = $rgConfig"
+    [Environment]::SetEnvironmentVariable('RIPGREP_CONFIG_PATH', $rgConfig, 'User')
+}
+$env:RIPGREP_CONFIG_PATH = $rgConfig
+
+# Yazi on Windows defaults to %AppData%\yazi\config. Point it at the
+# shared ~/.config/yazi that chezmoi applies on every home.
+$yaziConfig = Join-Path $env:USERPROFILE '.config\yazi'
+if ([Environment]::GetEnvironmentVariable('YAZI_CONFIG_HOME', 'User') -ne $yaziConfig) {
+    Write-Host "user env YAZI_CONFIG_HOME = $yaziConfig"
+    [Environment]::SetEnvironmentVariable('YAZI_CONFIG_HOME', $yaziConfig, 'User')
+}
+$env:YAZI_CONFIG_HOME = $yaziConfig
 
 $agent = Get-Service -Name ssh-agent -ErrorAction SilentlyContinue
 if (-not $agent) {
@@ -56,11 +80,5 @@ if (-not $agent) {
 }
 elseif ($agent.Status -ne 'Running') {
     Write-Warning 'ssh-agent is not running. From an elevated shell: Set-Service ssh-agent -StartupType Automatic; Start-Service ssh-agent'
-}
-
-$documents = [Environment]::GetFolderPath('MyDocuments')
-$expected = Join-Path $env:USERPROFILE 'Documents'
-if ($documents -ne $expected) {
-    Write-Warning "Documents resolves to $documents (folder redirection). PowerShell will not load the managed profile at $expected\PowerShell\profile.ps1."
 }
 {{ end -}}

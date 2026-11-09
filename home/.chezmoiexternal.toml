@@ -1,8 +1,8 @@
-{{/* Latest release, refreshed weekly. A fixed checksum would reject the next release. */}}
+{{/* URL and checksum are pinned to v0.9.7 and must be bumped together. */}}
 {{- if .isWSL }}
 [".local/bin/wsl2-ssh-agent"]
     type = "file"
-    url = "https://github.com/mame/wsl2-ssh-agent/releases/latest/download/wsl2-ssh-agent{{ if eq .chezmoi.arch "arm64" }}-arm64{{ end }}"
+    url = "https://github.com/mame/wsl2-ssh-agent/releases/download/v0.9.7/wsl2-ssh-agent{{ if eq .chezmoi.arch "arm64" }}-arm64{{ end }}"
     executable = true
-    refreshPeriod = "168h"
+    checksum.sha256 = "{{ if eq .chezmoi.arch "arm64" }}e9cb0347a72ca68a511e48779080b80a22af1bf670e5a52c9f35f95951ce5221{{ else }}281c64f6079598de1a455292d533f3ae21837980a3d3012074bc14ad695325d8{{ end }}"
 {{- end }}
